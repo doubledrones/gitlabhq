@@ -2,6 +2,7 @@
 - line_new = 0
 - lines_arr = diff.diff.lines.to_a
 - lines_arr.each do |line|
+  - encode(line)
   - next if line.match(/^--- \/dev\/null/)
   - next if line.match(/^--- a/)
   - next if line.match(/^\+\+\+ b/)
@@ -13,10 +14,8 @@
   = diff_line(line, line_new, line_old)
   - if line[0] == "+"
     - line_new += 1
-  - elsif
-    - line[0] == "-"
+  - elsif line[0] == "-"
     - line_old += 1
   - else
     - line_new += 1
     - line_old += 1
-

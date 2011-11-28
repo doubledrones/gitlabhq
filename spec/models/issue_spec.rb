@@ -31,7 +31,6 @@ end
 #
 #  id          :integer         not null, primary key
 #  title       :string(255)
-#  content     :text
 #  assignee_id :integer
 #  author_id   :integer
 #  project_id  :integer
@@ -39,5 +38,6 @@ end
 #  updated_at  :datetime
 #  closed      :boolean         default(FALSE), not null
 #  position    :integer         default(0)
+#  critical    :boolean         default(FALSE), not null
 #
 

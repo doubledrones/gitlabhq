@@ -1,3 +1,5 @@
+require File.join(Rails.root, 'lib', 'graph_commit')
+
 class ProjectsController < ApplicationController
   before_filter :project, :except => [:index, :new, :create]
   layout :determine_layout
@@ -6,8 +8,8 @@ class ProjectsController < ApplicationController
   before_filter :add_project_abilities
   before_filter :authorize_read_project!, :except => [:index, :new, :create]
   before_filter :authorize_admin_project!, :only => [:edit, :update, :destroy]
-
   before_filter :require_non_empty_project, :only => [:blob, :tree]
+  before_filter :load_refs, :only => :tree # load @branch, @tag & @ref
 
   def index
     source = current_user.projects
@@ -64,21 +66,8 @@ class ProjectsController < ApplicationController
 
   def show
     return render "projects/empty" unless @project.repo_exists?
-    @date = case params[:view]
-            when "week" then Date.today - 7.days
-            when "day" then Date.today
-            else nil
-            end
-
-    if @date
-      @date = @date.at_beginning_of_day
-
-      @commits = @project.commits_since(@date)
-      @messages = project.notes.since(@date).order("created_at DESC")
-    else
-      @commits = @project.fresh_commits
-      @messages = project.notes.fresh.limit(10)
-    end
+    limit = (params[:limit] || 20).to_i
+    @activities = @project.cached_updates(limit)
   end
 
   #
@@ -90,55 +79,14 @@ class ProjectsController < ApplicationController
     @notes = @project.common_notes.order("created_at DESC")
     @notes = @notes.fresh.limit(20)
 
-    respond_to do |format| 
+    respond_to do |format|
       format.html
       format.js { respond_with_notes }
     end
   end
 
-  #
-  # Repository preview
-  #
-
-  def tree
-    load_refs # load @branch, @tag & @ref
-
-    @repo = project.repo
-
-    if params[:commit_id]
-      @commit = @repo.commits(params[:commit_id]).first
-    else
-      @commit = @repo.commits(@ref || "master").first
-    end
-
-    @tree = @commit.tree
-    @tree = @tree / params[:path] if params[:path]
-
-    respond_to do |format|
-      format.html # show.html.erb
-      format.js do
-        # diasbale cache to allow back button works
-        response.headers["Cache-Control"] = "no-cache, no-store, max-age=0, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "Fri, 01 Jan 1990 00:00:00 GMT"
-      end
-    end
-  rescue
-    return render_404
-  end
-
-  def blob
-    @repo = project.repo
-    @commit = project.commit(params[:commit_id])
-    @tree = project.tree(@commit, params[:path])
-
-    if @tree.is_a?(Grit::Blob)
-      send_data(@tree.data, :type => @tree.mime_type, :disposition => 'inline', :filename => @tree.name)
-    else
-      head(404)
-    end
-  rescue
-    return render_404
+  def graph
+    @days_json, @commits_json = GraphCommit.to_graph(project)
   end
 
   def destroy

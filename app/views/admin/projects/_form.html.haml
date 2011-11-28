@@ -6,25 +6,34 @@
         - @admin_project.errors.full_messages.each do |msg|
           %li= msg
 
-  .span-24
-    .span-12
-      .field
-        = f.label :name
-        %br
-        = f.text_field :name
-      .field
-        = f.label :code
-        %br
-        = f.text_field :code
-      .field
-        = f.label :path
-        %br
-        = f.text_field :path
-    .span-10
-      .field
-        = f.label :description
-        %br
-        = f.text_area :description
+  .form-row
+    = f.label :name
+    %br
+    = f.text_field :name
+  .form-row
+    = f.label :code
+    %br
+    = f.text_field :code
+  .form-row
+    = f.label :path
+    %br
+    = f.text_field :path
+
+  .form-row
+    = f.label :tag_list
+    %br
+    = f.text_area :tag_list, :placeholder => "project tags", :style => "height:50px", :id => :tag_field
+
+  .form-row
+    = f.label :description
+    %br
+    = f.text_area :description
   .clear
+  %br
   .actions
-    = f.submit 'Save', :class => "lbutton"
+    = f.submit 'Save', :class => "grey-button"
+
+:javascript
+  $(function(){
+    taggifyForm();
+  })

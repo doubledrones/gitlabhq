@@ -46,6 +46,25 @@ class Project < ActiveRecord::Base
 
   scope :public_only, where(:private_flag => false)
 
+  def repository
+    @repository ||= Repository.new(self)
+  end
+
+  delegate :repo,
+    :url_to_repo,
+    :path_to_repo,
+    :update_gitosis_project,
+    :destroy_gitosis_project,
+    :tags,
+    :repo_exists?,
+    :commit,
+    :commits,
+    :tree,
+    :heads,
+    :commits_since,
+    :fresh_commits,
+    :to => :repository, :prefix => nil
+
   def to_param
     code
   end
@@ -55,20 +74,24 @@ class Project < ActiveRecord::Base
     users_projects.find_by_user_id(user.id) if user
   end
 
+  def fresh_issues(n)
+    issues.includes(:project, :author).order("created_at desc").first(n)
+  end
+
+  def fresh_notes(n)
+    notes.inc_author_project.order("created_at desc").first(n)
+  end
+
   def common_notes
-    notes.where(:noteable_type => ["", nil])
+    notes.where(:noteable_type => ["", nil]).inc_author_project
   end
 
-  def update_gitosis_project
-    Gitosis.new.configure do |c|
-      c.update_project(path, gitosis_writers)
-    end
+  def build_commit_note(commit)
+    notes.new(:noteable_id => commit.id, :noteable_type => "Commit")
   end
 
-  def destroy_gitosis_project
-    Gitosis.new.configure do |c|
-      c.destroy_project(self)
-    end
+  def commit_notes(commit)
+    notes.where(:noteable_id => commit.id, :noteable_type => "Commit")
   end
 
   def add_access(user, *access)
@@ -98,6 +121,10 @@ class Project < ActiveRecord::Base
     @admins ||=users_projects.includes(:user).where(:admin => true).map(&:user)
   end
 
+  def root_ref 
+    "master"
+  end
+
   def public?
     !private_flag
   end
@@ -106,29 +133,9 @@ class Project < ActiveRecord::Base
     private_flag
   end
 
-  def url_to_repo
-    "#{GITOSIS["git_user"]}@#{GITOSIS["host"]}:#{path}.git"
-  end
-
-  def path_to_repo
-    GITOSIS["base_path"] + path + ".git"
-  end
-
-  def repo
-    @repo ||= Grit::Repo.new(path_to_repo)
-  end
-
-  def tags
-    repo.tags.map(&:name).sort.reverse
-  end
-
-  def repo_exists?
-    repo rescue false
-  end
-
-  def last_activity 
+  def last_activity
     updates(1).first
-  rescue 
+  rescue
     nil
   end
 
@@ -136,56 +143,31 @@ class Project < ActiveRecord::Base
     last_activity.try(:created_at)
   end
 
+  # Get project updates from cache
+  # or calculate. 
+  def cached_updates(limit, expire = 2.minutes)
+    activities_key = "project_#{id}_activities"
+    cached_activities = Rails.cache.read(activities_key)
+    if cached_activities
+      activities = cached_activities
+    else
+      activities = updates(limit)
+      Rails.cache.write(activities_key, activities, :expires_in => 60.seconds)
+    end
+
+    activities
+  end
+
+  # Get 20 events for project like
+  # commits, issues or notes
   def updates(n = 3)
-    [ 
+    [
       fresh_commits(n),
-      issues.last(n),
-      notes.fresh.limit(n)
+      fresh_issues(n),
+      fresh_notes(n)
     ].compact.flatten.sort do |x, y|
       y.created_at <=> x.created_at
     end[0...n]
-  end
-
-  def commit(commit_id = nil)
-    if commit_id
-      repo.commits(commit_id).first
-    else
-      repo.commits.first
-    end
-  end
-
-  def heads
-    @heads ||= repo.heads
-  end
-
-  def fresh_commits(n = 10)
-    commits = heads.map do |h|
-      repo.commits(h.name, n)
-    end.flatten.uniq { |c| c.id }
-
-    commits.sort! do |x, y|
-      y.committed_date <=> x.committed_date
-    end
-
-    commits[0...n]
-  end
-
-  def commits_since(date)
-    commits = heads.map do |h|
-      repo.log(h.name, nil, :since => date)
-    end.flatten.uniq { |c| c.id }
-
-    commits.sort! do |x, y|
-      y.committed_date <=> x.committed_date
-    end
-
-    commits
-  end
-
-  def tree(fcommit, path = nil)
-    fcommit = commit if fcommit == :head
-    tree = fcommit.tree
-    path ? (tree / path) : tree
   end
 
   def check_limit
