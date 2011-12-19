@@ -20,11 +20,11 @@ describe "Projects" do
       @u2 = Factory :user
       @u3 = Factory :user
       # full access
-      @project.users_projects.create(:user => @u1, :read => true, :write => true, :admin => true)
+      @project.users_projects.create(:user => @u1, :project_access => Project::PROJECT_RWA)
       # no access
-      @project.users_projects.create(:user => @u2, :read => false, :write => false, :admin => false)
+      @project.users_projects.create(:user => @u2, :project_access => Project::PROJECT_N)
       # readonly
-      @project.users_projects.create(:user => @u3, :read => true, :write => false, :admin => false)
+      @project.users_projects.create(:user => @u3, :project_access => Project::PROJECT_R)
     end
 
     describe "GET /project_code" do
@@ -121,6 +121,15 @@ describe "Projects" do
       it { project_snippets_path(@project).should be_denied_for @u2 }
       it { project_snippets_path(@project).should be_denied_for :user }
       it { project_snippets_path(@project).should be_denied_for :visitor }
+    end
+
+    describe "GET /project_code/merge_requests" do
+      it { project_merge_requests_path(@project).should be_allowed_for @u1 }
+      it { project_merge_requests_path(@project).should be_allowed_for @u3 }
+      it { project_merge_requests_path(@project).should be_denied_for :admin }
+      it { project_merge_requests_path(@project).should be_denied_for @u2 }
+      it { project_merge_requests_path(@project).should be_denied_for :user }
+      it { project_merge_requests_path(@project).should be_denied_for :visitor }
     end
   end
 end

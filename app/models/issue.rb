@@ -2,7 +2,7 @@ class Issue < ActiveRecord::Base
   belongs_to :project
   belongs_to :author, :class_name => "User"
   belongs_to :assignee, :class_name => "User"
-  has_many :notes, :as => :noteable
+  has_many :notes, :as => :noteable, :dependent => :destroy
 
   attr_protected :author, :author_id, :project, :project_id
 
@@ -32,6 +32,10 @@ class Issue < ActiveRecord::Base
   scope :assigned, lambda { |u| where(:assignee_id => u.id)}
 
   acts_as_list
+
+  def self.open_for(user)
+    opened.assigned(user)
+  end
 
   def today?
     Date.today == created_at.to_date

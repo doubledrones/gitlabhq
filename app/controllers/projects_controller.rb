@@ -8,8 +8,7 @@ class ProjectsController < ApplicationController
   before_filter :add_project_abilities
   before_filter :authorize_read_project!, :except => [:index, :new, :create]
   before_filter :authorize_admin_project!, :only => [:edit, :update, :destroy]
-  before_filter :require_non_empty_project, :only => [:blob, :tree]
-  before_filter :load_refs, :only => :tree # load @branch, @tag & @ref
+  before_filter :require_non_empty_project, :only => [:blob, :tree, :graph]
 
   def index
     source = current_user.projects
@@ -30,7 +29,11 @@ class ProjectsController < ApplicationController
 
     Project.transaction do
       @project.save!
-      @project.users_projects.create!(:admin => true, :read => true, :write => true, :user => current_user)
+      @project.users_projects.create!(:repo_access => Repository::REPO_RW , :project_access => Project::PROJECT_RWA, :user => current_user)
+
+      # when project saved no team member exist so 
+      # project repository should be updated after first user add
+      @project.update_repository
     end
 
     respond_to do |format|
@@ -42,8 +45,8 @@ class ProjectsController < ApplicationController
         format.js
       end
     end
-  rescue Gitosis::AccessDenied
-    render :js => "location.href = '#{errors_gitosis_path}'" and return
+  rescue Gitlabhq::Gitolite::AccessDenied
+    render :js => "location.href = '#{errors_githost_path}'" and return
   rescue StandardError => ex
     @project.errors.add(:base, "Cant save project. Please try again later")
     respond_to do |format|
@@ -65,7 +68,7 @@ class ProjectsController < ApplicationController
   end
 
   def show
-    return render "projects/empty" unless @project.repo_exists?
+    return render "projects/empty" unless @project.repo_exists? && @project.has_commits?
     limit = (params[:limit] || 20).to_i
     @activities = @project.cached_updates(limit)
   end
@@ -90,7 +93,11 @@ class ProjectsController < ApplicationController
   end
 
   def destroy
+    # Disable the UsersProject update_repository call, otherwise it will be
+    # called once for every person removed from the project
+    UsersProject.skip_callback(:destroy, :after, :update_repository)
     project.destroy
+    UsersProject.set_callback(:destroy, :after, :update_repository)
 
     respond_to do |format|
       format.html { redirect_to projects_url }

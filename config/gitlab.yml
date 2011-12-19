@@ -6,9 +6,10 @@ email:
   from: notify@gitlabhq.com
   host: gitlabhq.com
 
-# Gitosis congiguration
-gitosis:
-  admin_uri: git@localhost:gitosis-admin.git
+# Git Hosting congiguration
+git_host:
+  system: gitolite
+  admin_uri: git@localhost:gitolite-admin
   base_path: /home/git/repositories/
   host: localhost
   git_user: git

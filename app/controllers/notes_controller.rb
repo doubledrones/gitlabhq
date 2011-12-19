@@ -3,6 +3,8 @@ class NotesController < ApplicationController
 
   # Authorize
   before_filter :add_project_abilities
+
+  before_filter :authorize_read_note!
   before_filter :authorize_write_note!, :only => [:create]
 
   respond_to :js
@@ -42,6 +44,8 @@ class NotesController < ApplicationController
         Notify.note_commit_email(u, @note).deliver
       when "Issue" then
         Notify.note_issue_email(u, @note).deliver
+      when "MergeRequest"
+        true # someone should write email notification
       when "Snippet"
         true
       else

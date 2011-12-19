@@ -1,19 +1,26 @@
+%h2.icon
+  %span>
+  Team
 - if can? current_user, :admin_team_member, @project
   %div#new-member-holder
-    = link_to "Add new", new_project_team_member_path(@project), :remote => true, :class => "grey-button"
+    .right= link_to "Add new", new_project_team_member_path(@project), :remote => true, :class => "grey-button"
   %br
 %table.round-borders#team-table
   %thead
     %th Name
-    %th Email
-    %th Web
-    %th Git
-    %th Admin
+    %th Project
+    %th Repository
     - if can? current_user, :admin_team_member, @project
       %th Actions
   - @project.users_projects.each do |up|
     = render(:partial => 'team_members/show', :locals => {:member => up})
 
 :javascript
+  $(function(){
+    $('#team-table .repo-access-select, #team-table .project-access-select').live("change", function() { 
+      $(this.form).submit();
+    });
+  })
+
   $('.delete-team-member').live('ajax:success', function() {
     $(this).closest('tr').fadeOut(); });

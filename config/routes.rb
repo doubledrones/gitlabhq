@@ -1,11 +1,12 @@
 Gitlab::Application.routes.draw do
 
+
   get 'tags'=> 'tags#index'
   get 'tags/:tag' => 'projects#index'
 
   namespace :admin do
     resources :users
-    resources :projects
+    resources :projects, :constraints => { :id => /[^\/]+/ }
     resources :team_members
     get 'emails', :to => 'mailer#preview'
     get 'mailer/preview_note'
@@ -14,21 +15,25 @@ Gitlab::Application.routes.draw do
     root :to => "users#index"
   end
 
-  get "errors/gitosis"
+  get "errors/githost"
   get "profile/password", :to => "profile#password"
   put "profile/password", :to => "profile#password_update"
   put "profile/reset_private_token", :to => "profile#reset_private_token"
   put "profile/edit", :to => "profile#social_update"
   get "profile", :to => "profile#show"
+
   get "dashboard", :to => "dashboard#index"
+  get "dashboard/issues", :to => "dashboard#issues"
+  get "dashboard/merge_requests", :to => "dashboard#merge_requests"
+
   #get "profile/:id", :to => "profile#show"
 
-  resources :projects, :only => [:new, :create, :index]
+  resources :projects, :constraints => { :id => /[^\/]+/ }, :only => [:new, :create, :index]
   resources :keys
 
   devise_for :users
 
-  resources :projects, :except => [:new, :create, :index], :path => "/" do
+  resources :projects, :constraints => { :id => /[^\/]+/ }, :except => [:new, :create, :index], :path => "/" do
     member do
       get "team"
       get "wall"
@@ -59,6 +64,12 @@ Gitlab::Application.routes.draw do
       end
     end
 
+    resources :merge_requests do 
+      member do 
+        get :diffs
+        get :commits
+      end
+    end
     resources :snippets
     resources :commits
     resources :team_members

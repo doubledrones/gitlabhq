@@ -1,8 +1,14 @@
 require "grit"
 
 class Project < ActiveRecord::Base
+  PROJECT_N = 0
+  PROJECT_R = 1
+  PROJECT_RW = 2
+  PROJECT_RWA = 3
+
   belongs_to :owner, :class_name => "User"
 
+  has_many :merge_requests, :dependent => :destroy
   has_many :issues, :dependent => :destroy, :order => "position"
   has_many :users_projects, :dependent => :destroy
   has_many :users, :through => :users_projects
@@ -19,8 +25,8 @@ class Project < ActiveRecord::Base
   validates :path,
             :uniqueness => true,
             :presence => true,
-            :format => { :with => /^[a-zA-Z0-9_\-]*$/,
-                         :message => "only letters, digits & '_' '-' allowed" },
+            :format => { :with => /^[a-zA-Z0-9_\-\.]*$/,
+                         :message => "only letters, digits & '_' '-' '.' allowed" },
             :length   => { :within => 0..255 }
 
   validates :description,
@@ -29,8 +35,8 @@ class Project < ActiveRecord::Base
   validates :code,
             :presence => true,
             :uniqueness => true,
-            :format => { :with => /^[a-zA-Z0-9_\-]*$/,
-                         :message => "only letters, digits & '_' '-' allowed"  },
+            :format => { :with => /^[a-zA-Z0-9_\-\.]*$/,
+                         :message => "only letters, digits & '_' '-' '.' allowed"  },
             :length   => { :within => 3..255 }
 
   validates :owner,
@@ -39,12 +45,22 @@ class Project < ActiveRecord::Base
   validate :check_limit
   validate :repo_name
 
-  after_destroy :destroy_gitosis_project
-  after_save :update_gitosis_project
+  after_destroy :destroy_repository
+  after_save :update_repository
 
   attr_protected :private_flag, :owner_id
 
   scope :public_only, where(:private_flag => false)
+
+
+  def self.access_options
+    {
+      "Denied" => PROJECT_N,
+      "Read"   => PROJECT_R,
+      "Report" => PROJECT_RW,
+      "Admin"  => PROJECT_RWA
+    }
+  end
 
   def repository
     @repository ||= Repository.new(self)
@@ -53,8 +69,8 @@ class Project < ActiveRecord::Base
   delegate :repo,
     :url_to_repo,
     :path_to_repo,
-    :update_gitosis_project,
-    :destroy_gitosis_project,
+    :update_repository,
+    :destroy_repository,
     :tags,
     :repo_exists?,
     :commit,
@@ -72,6 +88,10 @@ class Project < ActiveRecord::Base
   def team_member_by_name_or_email(email = nil, name = nil)
     user = users.where("email like ? or name like ?", email, name).first
     users_projects.find_by_user_id(user.id) if user
+  end
+
+  def team_member_by_id(user_id)
+    users_projects.find_by_user_id(user_id)
   end
 
   def fresh_issues(n)
@@ -94,9 +114,22 @@ class Project < ActiveRecord::Base
     notes.where(:noteable_id => commit.id, :noteable_type => "Commit")
   end
 
+  def has_commits?
+    !!commit
+  end
+
+  # Compatible with all access rights
+  # Should be rewrited for new access rights
   def add_access(user, *access)
+    access = if access.include?(:admin) 
+               { :project_access => PROJECT_RWA } 
+             elsif access.include?(:write)
+               { :project_access => PROJECT_RW } 
+             else
+               { :project_access => PROJECT_R } 
+             end
     opts = { :user => user }
-    access.each { |name| opts.merge!(name => true) }
+    opts.merge!(access)
     users_projects.create(opts)
   end
 
@@ -104,25 +137,44 @@ class Project < ActiveRecord::Base
     users_projects.where(:project_id => self.id, :user_id => user.id).destroy if self.id
   end
 
-  def writers
-    @writers ||= users_projects.includes(:user).where(:write => true).map(&:user)
+  def repository_readers
+    keys = Key.joins({:user => :users_projects}).
+      where("users_projects.project_id = ? AND users_projects.repo_access = ?", id, Repository::REPO_R)
+    keys.map(&:identifier)
   end
 
-  def gitosis_writers
-    keys = Key.joins({:user => :users_projects}).where("users_projects.project_id = ? AND users_projects.write = ?", id, true)
+  def repository_writers
+    keys = Key.joins({:user => :users_projects}).
+      where("users_projects.project_id = ? AND users_projects.repo_access = ?", id, Repository::REPO_RW)
     keys.map(&:identifier)
   end
 
   def readers
-    @readers ||= users_projects.includes(:user).where(:read => true).map(&:user)
+    @readers ||= users_projects.includes(:user).where(:project_access => [PROJECT_R, PROJECT_RW, PROJECT_RWA]).map(&:user)
+  end
+
+  def writers
+    @writers ||= users_projects.includes(:user).where(:project_access => [PROJECT_RW, PROJECT_RWA]).map(&:user)
   end
 
   def admins
-    @admins ||=users_projects.includes(:user).where(:admin => true).map(&:user)
+    @admins ||= users_projects.includes(:user).where(:project_access => PROJECT_RWA).map(&:user)
+  end
+
+  def allow_read_for?(user)
+    !users_projects.where(:user_id => user.id, :project_access => [PROJECT_R, PROJECT_RW, PROJECT_RWA]).empty?
+  end
+
+  def allow_write_for?(user)
+    !users_projects.where(:user_id => user.id, :project_access => [PROJECT_RW, PROJECT_RWA]).empty?
+  end
+
+  def allow_admin_for?(user)
+    !users_projects.where(:user_id => user.id, :project_access => [PROJECT_RWA]).empty? || owner_id == user.id
   end
 
   def root_ref 
-    "master"
+    default_branch || "master"
   end
 
   def public?
@@ -179,8 +231,8 @@ class Project < ActiveRecord::Base
   end
 
   def repo_name
-    if path == "gitosis-admin"
-      errors.add(:path, " like 'gitosis-admin' is not allowed")
+    if path == "gitolite-admin"
+      errors.add(:path, " like 'gitolite-admin' is not allowed")
     end
   end
 

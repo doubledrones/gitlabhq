@@ -1,5 +1,6 @@
 require 'digest/md5'
 module ApplicationHelper
+  include Utils::CharEncode
 
   def gravatar_icon(user_email)
     gravatar_host = request.ssl? ? "https://secure.gravatar.com" :  "http://www.gravatar.com"
@@ -48,11 +49,11 @@ module ApplicationHelper
 
   def grouped_options_refs(destination = :tree)
     options = [
-      ["Branch", @repo.heads.map(&:name) ],
+      ["Branch", @project.repo.heads.map(&:name) ],
       [ "Tag", @project.tags ]
     ]
 
-    grouped_options_for_select(options, @ref)
+    grouped_options_for_select(options, @ref || @project.default_branch)
   end
 
   def markdown(text)

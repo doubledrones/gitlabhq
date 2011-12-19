@@ -1,0 +1,54 @@
+= form_for [@project, @merge_request] do |f|
+  %div
+    %span.entity-info
+      - if @merge_request.new_record?
+        = link_to project_merge_requests_path(@project) do 
+          .entity-button
+            Merge Requests
+            %i
+      - else    
+        = link_to project_merge_request_path(@project, @merge_request) do 
+          .entity-button
+            Show Merge Request
+            %i
+
+    %h2= @merge_request.new_record? ? "New Merge Request" : "Edit Merge Request ##{@merge_request.id}"
+
+    %hr
+  %table.no-borders
+    -if @merge_request.errors.any?
+      %tr 
+        %td{:colspan => 2}
+          #error_explanation
+            - @merge_request.errors.full_messages.each do |msg|
+              %span= msg
+              %br
+    %tr
+      %td= f.label :source_branch, "From"
+      %td= f.select(:source_branch, @project.heads.map(&:name), { :include_blank => "Select branch" }, :style => "width:250px")
+    %tr
+      %td= f.label :target_branch, "To"
+      %td= f.select(:target_branch, @project.heads.map(&:name), { :include_blank => "Select branch" }, :style => "width:250px")
+    %tr
+      %td= f.label :assignee_id, "Assign to"
+      %td= f.select(:assignee_id, @project.users.all.collect {|p| [ p.name, p.id ] }, { :include_blank => "Select user" }, :style => "width:250px")
+  = f.text_area :title, :style => "width:718px; height:100px", :maxlength => 255
+  %br
+  %br
+  .merge-tabs
+    = f.submit 'Save', :class => "grey-button"
+    &nbsp;
+    - unless @merge_request.new_record?
+      .right
+        = link_to 'Remove', [@project, @merge_request], :confirm => 'Are you sure?', :method => :delete, :class => "red-button"
+
+
+
+
+:javascript
+  $(function(){
+    $('select#merge_request_assignee_id').chosen();
+    $('select#merge_request_source_branch').chosen();
+    $('select#merge_request_target_branch').chosen();
+  });
+

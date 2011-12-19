@@ -1,8 +1,22 @@
+require File.join(Rails.root, "lib", "gitlabhq", "git_host")
+
 class Repository
+  REPO_N = 0
+  REPO_R = 1
+  REPO_RW = 2
+
   attr_accessor :project
 
   def self.default_ref
     "master"
+  end
+
+  def self.access_options
+    {
+      "Denied"      => REPO_N,
+      "Pull"        => REPO_R,
+      "Pull & Push" => REPO_RW
+    }
   end
 
   def initialize(project)
@@ -22,25 +36,21 @@ class Repository
   end
 
   def url_to_repo
-    if !GITOSIS["port"] or GITOSIS["port"] == 22
-      "#{GITOSIS["git_user"]}@#{GITOSIS["host"]}:#{path}.git"
-    else
-      "ssh://#{GITOSIS["git_user"]}@#{GITOSIS["host"]}:#{GITOSIS["port"]}/#{path}.git"
-    end
+    Gitlabhq::GitHost.url_to_repo(path)
   end
 
   def path_to_repo
-    GITOSIS["base_path"] + path + ".git"
+    GIT_HOST["base_path"] + path + ".git"
   end
 
-  def update_gitosis_project
-    Gitosis.new.configure do |c|
-      c.update_project(path, project.gitosis_writers)
+  def update_repository
+    Gitlabhq::GitHost.system.new.configure do |c|
+      c.update_project(path, project)
     end
   end
 
-  def destroy_gitosis_project
-    Gitosis.new.configure do |c|
+  def destroy_repository
+    Gitlabhq::GitHost.system.new.configure do |c|
       c.destroy_project(@project)
     end
   end
